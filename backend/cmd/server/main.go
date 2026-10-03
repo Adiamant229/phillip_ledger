@@ -10,9 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Adiamant229/backend/phillip_ledger/internal/handler"
-	"github.com/Adiamant229/phillip_ledger/internal/repo"
-	"github.com/Adiamant229/phillip_ledger/internal/service"
+	"github.com/Adiamant229/phillip_ledger/backend/internal/handler"
+	"github.com/Adiamant229/phillip_ledger/backend/internal/repo"
+	"github.com/Adiamant229/phillip_ledger/backend/internal/service"
 )
 
 func main() {

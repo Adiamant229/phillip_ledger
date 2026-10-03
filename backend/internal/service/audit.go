@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/phillip_ledger/backend/internal/domain"
-	"github.com/phillip_ledger/backend/internal/repo"
+	"github.com/phillip_ledger/backend/backend/internal/repo"
 	"github.com/shopspring/decimal"
 )
 
