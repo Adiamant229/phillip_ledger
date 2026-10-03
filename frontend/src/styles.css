@@ -1,0 +1,76 @@
+:root {
+  --paper: #eef2f4;
+  --sheet: #fbfcfc;
+  --ink: #17252e;
+  --muted: #5d6f7a;
+  --rule: #cdd8de;
+  --accent: #0e5a63;
+  --accent-ink: #ffffff;
+  --debit: #a8321f;
+  --credit: #1d6a3c;
+  --warn-bg: #fbeee9;
+  --ok-bg: #e5f2ea;
+  --focus: #1b6fd1;
+  font-family: "Source Serif 4", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  color: var(--ink);
+  background: var(--paper);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0f1a20; --sheet: #15232b; --ink: #e4ecf0; --muted: #8fa3ae; --rule: #2a3d48;
+    --accent: #4fb3bf; --accent-ink: #08181c; --debit: #ff8f7a; --credit: #6fd496;
+    --warn-bg: #2d1b17; --ok-bg: #14281d; --focus: #6aa9ff;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; line-height: 1.5; }
+h1, h2, h3 { font-weight: 600; margin: 0; }
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1.1rem; margin-bottom: .75rem; }
+.num, td.num, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+.sans, button, input, select, label, th { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+.app { max-width: 1180px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+header.top { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; border-bottom: 2px solid var(--ink); padding-bottom: .6rem; }
+header.top p { margin: 0; color: var(--muted); font-size: .9rem; }
+.grid { display: grid; grid-template-columns: 320px 1fr; gap: 1.25rem; align-items: start; }
+@media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+.stack { display: grid; gap: 1.25rem; }
+section.card { background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 1rem; }
+
+.accounts { list-style: none; margin: 0; padding: 0; }
+.accounts li button { width: 100%; text-align: left; display: flex; justify-content: space-between; gap: .5rem; background: none; border: 0; border-bottom: 1px solid var(--rule); padding: .55rem .35rem; cursor: pointer; color: inherit; font-size: .95rem; }
+.accounts li button:hover { background: var(--paper); }
+.accounts li button[aria-current="true"] { background: var(--paper); box-shadow: inset 3px 0 0 var(--accent); }
+.accounts .meta { color: var(--muted); font-size: .8rem; }
+
+form.row { display: grid; gap: .6rem; }
+.fields { display: flex; flex-wrap: wrap; gap: .6rem; align-items: end; }
+label { display: grid; gap: .2rem; font-size: .8rem; color: var(--muted); }
+input, select { font-size: .95rem; padding: .45rem .55rem; border: 1px solid var(--rule); border-radius: 4px; background: var(--sheet); color: var(--ink); min-width: 0; }
+button { font-size: .9rem; padding: .5rem .9rem; border-radius: 4px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+button.secondary { background: transparent; color: var(--accent); }
+button.link { background: none; border: 0; color: var(--accent); padding: 0; text-decoration: underline; }
+button:disabled { opacity: .5; cursor: progress; }
+:is(button, input, select):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.balance { display: flex; align-items: baseline; gap: .6rem; margin: .25rem 0 1rem; }
+.balance .num { font-size: 2.4rem; font-weight: 600; letter-spacing: -.02em; }
+.balance .cur { color: var(--muted); font-family: system-ui, sans-serif; }
+
+table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+th { text-align: left; font-weight: 600; font-size: .78rem; color: var(--muted); border-bottom: 2px solid var(--ink); padding: .35rem .4rem; }
+td { padding: .45rem .4rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th.r, td.r { text-align: right; }
+.debit { color: var(--debit); }
+.credit { color: var(--credit); }
+.tag { font-family: system-ui, sans-serif; font-size: .75rem; border: 1px solid var(--rule); border-radius: 3px; padding: 0 .35rem; color: var(--muted); }
+.tag.rev { color: var(--debit); border-color: var(--debit); }
+.table-wrap { overflow-x: auto; }
+
+.notice { padding: .55rem .75rem; border-radius: 4px; font-family: system-ui, sans-serif; font-size: .88rem; margin-top: .6rem; border: 1px solid var(--rule); }
+.notice.err { background: var(--warn-bg); border-color: var(--debit); }
+.notice.ok { background: var(--ok-bg); border-color: var(--credit); }
+.empty { color: var(--muted); margin: .5rem 0; font-size: .92rem; }
+.muted { color: var(--muted); font-size: .85rem; }
+ul.issues { margin: .5rem 0 0; padding-left: 1.1rem; font-size: .88rem; }
