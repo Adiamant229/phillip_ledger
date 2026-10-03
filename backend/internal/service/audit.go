@@ -6,8 +6,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/phillip_ledger/backend/internal/domain"
-	"github.com/phillip_ledger/backend/backend/internal/repo"
+	"github.com/Adiamant229/phillip_ledger/backend/internal/domain"
+	"github.com/Adiamant229/phillip_ledger/backend/backend/internal/repo"
 	"github.com/shopspring/decimal"
 )
 
