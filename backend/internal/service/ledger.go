@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Adiamant229/phillip_ledger/internal/domain"
-	"github.com/Adiamant229/phillip_ledger/internal/repo"
+	"github.com/Adiamant229/phillip_ledger/backend/internal/domain"
+	"github.com/Adiamant229/phillip_ledger/backend/internal/repo"
 	"github.com/shopspring/decimal"
 )
 
