@@ -74,3 +74,13 @@ th.r, td.r { text-align: right; }
 .empty { color: var(--muted); margin: .5rem 0; font-size: .92rem; }
 .muted { color: var(--muted); font-size: .85rem; }
 ul.issues { margin: .5rem 0 0; padding-left: 1.1rem; font-size: .88rem; }
+
+/* Scrollable tables: the header stays put while the body scrolls. */
+.scroll { max-height: 18rem; overflow: auto; border: 1px solid var(--rule); border-radius: 4px; }
+.scroll.short { max-height: 9rem; }
+.scroll:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.scroll th { position: sticky; top: 0; z-index: 1; background: var(--sheet); border-bottom: 0; box-shadow: 0 2px 0 var(--ink); }
+.toolbar { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: .6rem; margin-bottom: .25rem; }
+.toolbar h3 { font-size: 1rem; }
+h3.subhead { font-size: 1rem; margin: 1.25rem 0 .5rem; }
+.err-text { color: var(--debit); }

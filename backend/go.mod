@@ -1,4 +1,4 @@
-module github.com/Adiamant229/phillip_ledger/backend
+module github.com/dylan/ledger
 
 go 1.25.0
 

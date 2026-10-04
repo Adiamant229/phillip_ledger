@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sort"
 
-	"github.com/Adiamant229/phillip_ledger/backend/internal/domain"
+	"github.com/dylan/ledger/internal/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 )

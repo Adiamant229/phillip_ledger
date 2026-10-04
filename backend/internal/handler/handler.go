@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Adiamant229/phillip_ledger/backend/internal/domain"
-	"github.com/Adiamant229/phillip_ledger/backend/internal/service"
+	"github.com/dylan/ledger/internal/domain"
+	"github.com/dylan/ledger/internal/service"
 	"github.com/shopspring/decimal"
 )
 
@@ -106,16 +106,17 @@ func (h *Handler) deposit(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) transfer(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		SourceAccountID      int64           `json:"source_account_id"`
-		DestinationAccountID int64           `json:"destination_account_id"`
-		Amount               decimal.Decimal `json:"amount"`
+		SourceAccountID      int64            `json:"source_account_id"`
+		DestinationAccountID int64            `json:"destination_account_id"`
+		Amount               decimal.Decimal  `json:"amount"`
+		ExchangeRate         *decimal.Decimal `json:"exchange_rate"` // optional: 1 source = x destination
 	}
 	if !decode(w, r, &in) {
 		return
 	}
 	res, err := h.svc.Transfer(r.Context(), service.TransferRequest{
 		Key: r.Header.Get("Idempotency-Key"), SourceAccountID: in.SourceAccountID,
-		DestinationAccountID: in.DestinationAccountID, Amount: in.Amount,
+		DestinationAccountID: in.DestinationAccountID, Amount: in.Amount, ExchangeRate: in.ExchangeRate,
 	})
 	writeResult(w, res, err)
 }
@@ -157,19 +158,18 @@ func (h *Handler) listRates(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) setRate(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Base  string          `json:"base"`
-		Quote string          `json:"quote"`
+		Quote string          `json:"quote"` // the currency; the base is always USD: 1 USD = rate quote
 		Rate  decimal.Decimal `json:"rate"`
 	}
 	if !decode(w, r, &in) {
 		return
 	}
-	rate, err := h.svc.SetRate(r.Context(), in.Base, in.Quote, in.Rate)
+	rate, err := h.svc.SetRate(r.Context(), in.Quote, in.Rate)
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, rate)
+	writeJSON(w, http.StatusOK, rate) // 200, not 201: it overwrites the currency's single rate
 }
 
 func (h *Handler) integrity(w http.ResponseWriter, r *http.Request) {

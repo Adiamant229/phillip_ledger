@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/Adiamant229/phillip_ledger/backend/internal/domain"
+	"github.com/dylan/ledger/internal/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 )
@@ -56,11 +56,10 @@ func (r Reader) Currency(ctx context.Context, code string) (domain.Currency, err
 	return c, err
 }
 
-// LatestRate returns the newest direct base->quote rate, if any.
-func (r Reader) LatestRate(ctx context.Context, base, quote string) (decimal.Decimal, bool, error) {
+// UsdRate returns the stored rate "1 USD = rate quote", if one has been set.
+func (r Reader) UsdRate(ctx context.Context, quote string) (decimal.Decimal, bool, error) {
 	var rate decimal.Decimal
-	err := r.q.QueryRow(ctx, `SELECT rate FROM exchange_rates WHERE base = $1 AND quote = $2
-		ORDER BY effective_at DESC, id DESC LIMIT 1`, base, quote).Scan(&rate)
+	err := r.q.QueryRow(ctx, `SELECT rate FROM exchange_rates WHERE base = 'USD' AND quote = $1`, quote).Scan(&rate)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return rate, false, nil
 	}
@@ -68,8 +67,7 @@ func (r Reader) LatestRate(ctx context.Context, base, quote string) (decimal.Dec
 }
 
 func (r Reader) ListRates(ctx context.Context) ([]domain.Rate, error) {
-	rows, err := r.q.Query(ctx, `SELECT DISTINCT ON (base, quote) base, quote, rate, effective_at
-		FROM exchange_rates ORDER BY base, quote, effective_at DESC, id DESC`)
+	rows, err := r.q.Query(ctx, `SELECT base, quote, rate, effective_at FROM exchange_rates ORDER BY quote`)
 	if err != nil {
 		return nil, err
 	}

@@ -4,7 +4,19 @@ CREATE TABLE currencies (
     code     TEXT PRIMARY KEY CHECK (code ~ '^[A-Z]{3}$'),
     exponent SMALLINT NOT NULL CHECK (exponent BETWEEN 0 AND 8)   -- minor-unit digits (USD 2, JPY 0)
 );
-INSERT INTO currencies VALUES ('USD', 2), ('EUR', 2), ('GBP', 2), ('SGD', 2), ('JPY', 0);
+-- The currencies this ledger supports. exponent = decimal places the currency allows (amounts with more are
+-- rejected, never rounded): most are 2, JPY/KRW/VND are 0, KWD is 3. It must never change once money exists in
+-- a currency, because existing amounts were validated against it.
+-- Keep in sync with CURRENCY_EXPONENTS in frontend/src/types.ts (that list also drives the CurrencyFreaks `symbols=`).
+-- Adding a currency = add a row here and there; the two INSERT ... SELECT statements below then give it the
+-- funding and FX clearing accounts it needs.
+INSERT INTO currencies (code, exponent) VALUES
+    ('USD', 2), ('EUR', 2), ('GBP', 2), ('SGD', 2), ('JPY', 0),
+    ('AED', 2), ('AUD', 2), ('BRL', 2), ('CAD', 2), ('CHF', 2),
+    ('CNY', 2), ('DKK', 2), ('HKD', 2), ('IDR', 2), ('INR', 2),
+    ('KRW', 0), ('KWD', 3), ('MXN', 2), ('MYR', 2), ('NOK', 2),
+    ('NZD', 2), ('PHP', 2), ('PKR', 2), ('SAR', 2), ('SEK', 2),
+    ('THB', 2), ('TRY', 2), ('TWD', 2), ('VND', 0), ('ZAR', 2);
 
 CREATE TABLE accounts (
     id             BIGSERIAL PRIMARY KEY,
@@ -26,18 +38,20 @@ SELECT 'SYSTEM funding ' || code, code, TRUE, 'funding', TRUE FROM currencies;
 INSERT INTO accounts (name, currency, is_system, system_role, allow_negative)
 SELECT 'SYSTEM fx clearing ' || code, code, TRUE, 'fx', TRUE FROM currencies;
 
+-- Reference rates, kept deliberately small: ONE row per currency, always quoted against USD (1 USD = rate quote).
+-- The primary key plus the CHECKs cap the table at one row per non-USD currency (29 rows), with no history and
+-- no seed data: rates are entered from the UI and overwrite in place. Nothing is lost by overwriting, because the
+-- rate actually applied to a transfer is recorded on the transaction itself (transactions.fx_rate).
+-- Any other pair is derived by division, assuming triangulation through USD is lossless:
+--     1 A = ((B per USD) / (A per USD)) B
+-- A transfer may also carry its own rate (chosen in the UI); then no stored rate is needed at all.
 CREATE TABLE exchange_rates (
-    id           BIGSERIAL PRIMARY KEY,
-    base         TEXT NOT NULL REFERENCES currencies (code),
-    quote        TEXT NOT NULL REFERENCES currencies (code),
-    rate         NUMERIC(28, 12) NOT NULL CHECK (rate > 0),       -- 1 base = rate quote
+    base         TEXT NOT NULL DEFAULT 'USD' CHECK (base = 'USD'),
+    quote        TEXT NOT NULL REFERENCES currencies (code) CHECK (quote <> 'USD'),
+    rate         NUMERIC(28, 12) NOT NULL CHECK (rate > 0),       -- 1 USD = rate quote
     effective_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
-    CHECK (base <> quote)
+    PRIMARY KEY (base, quote)
 );
-CREATE INDEX exchange_rates_lookup ON exchange_rates (base, quote, effective_at DESC, id DESC);
--- Sample rates so the demo works out of the box. Not real market data.
-INSERT INTO exchange_rates (base, quote, rate) VALUES
-    ('USD', 'EUR', 0.92), ('USD', 'SGD', 1.30), ('USD', 'JPY', 150), ('GBP', 'USD', 1.25);
 
 CREATE TABLE transactions (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),

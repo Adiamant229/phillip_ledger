@@ -6,16 +6,18 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Adiamant229/phillip_ledger/backend/internal/domain"
+	"github.com/dylan/ledger/internal/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/shopspring/decimal"
 )
 
-func (s *Store) InsertRate(ctx context.Context, base, quote string, rate decimal.Decimal) (domain.Rate, error) {
+// UpsertRate sets "1 USD = rate quote", overwriting any earlier rate for that currency (one row per currency).
+func (s *Store) UpsertRate(ctx context.Context, quote string, rate decimal.Decimal) (domain.Rate, error) {
 	var r domain.Rate
-	err := s.pool.QueryRow(ctx, `INSERT INTO exchange_rates (base, quote, rate) VALUES ($1, $2, $3)
-		RETURNING base, quote, rate, effective_at`, base, quote, rate).Scan(&r.Base, &r.Quote, &r.Rate, &r.EffectiveAt)
+	err := s.pool.QueryRow(ctx, `INSERT INTO exchange_rates (quote, rate) VALUES ($1, $2)
+		ON CONFLICT (base, quote) DO UPDATE SET rate = EXCLUDED.rate, effective_at = clock_timestamp()
+		RETURNING base, quote, rate, effective_at`, quote, rate).Scan(&r.Base, &r.Quote, &r.Rate, &r.EffectiveAt)
 	var pe *pgconn.PgError
 	if errors.As(err, &pe) && pe.Code == "23503" {
 		return r, domain.ErrNotFound // unknown currency

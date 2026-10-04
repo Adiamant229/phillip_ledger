@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Adiamant229/phillip_ledger/backend/internal/domain"
-	"github.com/Adiamant229/phillip_ledger/backend/internal/repo"
+	"github.com/dylan/ledger/internal/domain"
+	"github.com/dylan/ledger/internal/repo"
 	"github.com/shopspring/decimal"
 )
 
@@ -28,6 +28,10 @@ type TransferRequest struct {
 	SourceAccountID      int64
 	DestinationAccountID int64
 	Amount               decimal.Decimal // in the source account's currency
+	// ExchangeRate is "1 source currency = ExchangeRate destination currency", chosen by the caller (the UI
+	// suggests one and lets the user edit it). Optional: when nil, the stored USD rates are divided instead.
+	// Must be nil for same-currency transfers.
+	ExchangeRate *decimal.Decimal
 }
 
 type Result struct {
@@ -151,7 +155,11 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) (Result, er
 	if !req.Amount.IsPositive() {
 		return Result{}, invalid("amount must be greater than zero")
 	}
-	hash := hashParts(domain.KindTransfer, req.SourceAccountID, req.DestinationAccountID, req.Amount.StringFixed(8))
+	rateKey := "rate=none" // the rate is part of the request: same key + different rate must not be a replay
+	if req.ExchangeRate != nil {
+		rateKey = "rate=" + req.ExchangeRate.StringFixed(12)
+	}
+	hash := hashParts(domain.KindTransfer, req.SourceAccountID, req.DestinationAccountID, req.Amount.StringFixed(8), rateKey)
 	return s.execute(ctx, req.Key, hash, func(tx *repo.Tx) (*posting, error) { return s.buildTransfer(ctx, tx, req) })
 }
 
@@ -279,6 +287,9 @@ func (s *Service) buildTransfer(ctx context.Context, tx *repo.Tx, req TransferRe
 		DestinationAmount: req.Amount, DestinationCurrency: dst.Currency,
 	}}
 	if src.Currency == dst.Currency {
+		if req.ExchangeRate != nil {
+			return nil, invalid("exchange_rate must be omitted when both accounts use the same currency")
+		}
 		p.legs = []domain.Leg{
 			{AccountID: src.ID, Currency: src.Currency, Amount: req.Amount.Neg()},
 			{AccountID: dst.ID, Currency: dst.Currency, Amount: req.Amount},
@@ -289,7 +300,7 @@ func (s *Service) buildTransfer(ctx context.Context, tx *repo.Tx, req TransferRe
 	// Cross-currency: route through the per-currency FX clearing accounts so every currency still nets to zero.
 	//   src  -A  (src ccy)      fxSrc +A (src ccy)
 	//   fxDst -B (dst ccy)      dst   +B (dst ccy)         where B = round_half_even(A * rate, dst exponent)
-	rate, err := s.rate(ctx, tx, src.Currency, dst.Currency)
+	rate, err := s.transferRate(ctx, tx, req.ExchangeRate, src.Currency, dst.Currency)
 	if err != nil {
 		return nil, err
 	}
@@ -387,32 +398,88 @@ func (s *Service) buildReversal(ctx context.Context, tx *repo.Tx, origID string)
 
 // ---- Exchange rates -------------------------------------------------------------------------------------
 
-// rate prefers a direct base->quote rate and otherwise inverts quote->base (12 dp). No triangulation.
-func (s *Service) rate(ctx context.Context, tx *repo.Tx, base, quote string) (decimal.Decimal, error) {
-	if r, ok, err := tx.LatestRate(ctx, base, quote); err != nil || ok {
-		return r, err
+// pivotCurrency is the one currency every stored rate is quoted against: "1 USD = r X".
+const pivotCurrency = "USD"
+
+// checkRate validates a rate that came from a caller: positive, not absurdly large, and at most 12 decimal places
+// (the precision stored on the transaction), so the rate used for the conversion is exactly the rate on record.
+func checkRate(r decimal.Decimal, what string) error {
+	if !r.IsPositive() {
+		return invalid("%s must be greater than zero", what)
 	}
-	if inv, ok, err := tx.LatestRate(ctx, quote, base); err != nil {
-		return decimal.Zero, err
-	} else if ok {
-		return decimal.NewFromInt(1).DivRound(inv, 12), nil
+	if r.GreaterThanOrEqual(maxAmount) {
+		return invalid("%s is too large", what)
 	}
-	return decimal.Zero, fmt.Errorf("%w for %s -> %s", domain.ErrNoRate, base, quote)
+	if !r.Truncate(12).Equal(r) {
+		return invalid("%s has more than 12 decimal places", what)
+	}
+	return nil
 }
 
-func (s *Service) SetRate(ctx context.Context, base, quote string, rate decimal.Decimal) (domain.Rate, error) {
-	base, quote = strings.ToUpper(strings.TrimSpace(base)), strings.ToUpper(strings.TrimSpace(quote))
-	if base == quote {
-		return domain.Rate{}, invalid("base and quote must differ")
+// transferRate picks the rate for "1 base = ? quote": the caller's own rate when given (it is trusted: the amount
+// the destination receives is derived from it here, so the ledger balances whatever it is), otherwise the stored
+// USD rates divided.
+func (s *Service) transferRate(ctx context.Context, tx *repo.Tx, supplied *decimal.Decimal, base, quote string) (decimal.Decimal, error) {
+	if supplied != nil {
+		if err := checkRate(*supplied, "exchange_rate"); err != nil {
+			return decimal.Zero, err
+		}
+		return *supplied, nil
 	}
-	if !rate.IsPositive() || !rate.Truncate(12).Equal(rate) || rate.GreaterThanOrEqual(maxAmount) {
-		return domain.Rate{}, invalid("rate must be positive with at most 12 decimal places")
+	return s.storedRate(ctx, tx, base, quote)
+}
+
+// storedRate derives "1 base = ? quote" from the stored USD rates, assuming triangulation through USD loses
+// nothing: (quote per USD) / (base per USD), rounded ONCE to 12 dp. USD itself is exactly 1 per USD, so USD->X is
+// the stored rate unchanged and X->USD is its inverse.
+func (s *Service) storedRate(ctx context.Context, tx *repo.Tx, base, quote string) (decimal.Decimal, error) {
+	perBase, err := s.perPivot(ctx, tx, base)
+	if err != nil {
+		return decimal.Zero, err
 	}
-	r, err := s.store.InsertRate(ctx, base, quote, rate)
+	perQuote, err := s.perPivot(ctx, tx, quote)
+	if err != nil {
+		return decimal.Zero, err
+	}
+	rate := perQuote.DivRound(perBase, 12)
+	if !rate.IsPositive() {
+		return decimal.Zero, fmt.Errorf("%w: %s -> %s is too small to represent at 12 decimal places", domain.ErrNoRate, base, quote)
+	}
+	return rate, nil
+}
+
+// perPivot returns how many units of cur equal 1 USD.
+func (s *Service) perPivot(ctx context.Context, tx *repo.Tx, cur string) (decimal.Decimal, error) {
+	if cur == pivotCurrency {
+		return decimal.NewFromInt(1), nil
+	}
+	r, ok, err := tx.UsdRate(ctx, cur)
+	if err != nil {
+		return decimal.Zero, err
+	}
+	if !ok {
+		return decimal.Zero, fmt.Errorf("%w for %s: set a USD->%s rate, or include exchange_rate in the request", domain.ErrNoRate, cur, cur)
+	}
+	return r, nil
+}
+
+// SetRate stores "1 USD = rate quote". There is at most one rate per currency (setting it again overwrites), and
+// USD has none, so the table can never hold more than one row per non-USD currency.
+func (s *Service) SetRate(ctx context.Context, quote string, rate decimal.Decimal) (domain.Rate, error) {
+	quote = strings.ToUpper(strings.TrimSpace(quote))
+	if quote == pivotCurrency {
+		return domain.Rate{}, invalid("rates are quoted against %s, so %s itself has no rate", pivotCurrency, pivotCurrency)
+	}
+	if err := checkRate(rate, "rate"); err != nil {
+		return domain.Rate{}, err
+	}
+	r, err := s.store.UpsertRate(ctx, quote, rate)
 	if errors.Is(err, domain.ErrNotFound) {
-		return r, invalid("unsupported currency in %s/%s", base, quote)
+		return r, invalid("unsupported currency %q", quote)
 	}
 	return r, err
 }
 
-func (s *Service) ListRates(ctx context.Context) ([]domain.Rate, error) { return s.store.ListRates(ctx) }
+func (s *Service) ListRates(ctx context.Context) ([]domain.Rate, error) {
+	return s.store.ListRates(ctx)
+}
